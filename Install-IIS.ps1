@@ -18,3 +18,41 @@ Configuration IISConfig
 
 IISConfig -ComputerName "localhost" -OutputPath "C:\build\" 
 
+
+
+Configuration ApplicationInstall
+{
+   Import-DscResource -Module cChoco  
+   Node "localhost"
+   {
+      LocalConfigurationManager
+      {
+          DebugMode = 'ForceModuleImport'
+      } 
+      cChocoInstaller installChoco #ensure choco is intalled
+      {
+        InstallDir = "c:\choco"
+      }
+      cChocoPackageInstaller installChrome
+      {
+        Name        = "googlechrome"
+        DependsOn   = "[cChocoInstaller]installChoco"
+        #This will automatically try to upgrade if available, only if a version is not explicitly specified. 
+        AutoUpgrade = $True
+      }
+      cChocoPackageInstaller SQLSMObjects
+      {
+        Name = "sql2014.smo"
+        DependsOn = "[cChocoInstaller]installChoco"
+      }
+
+        cChocoPackageInstaller ReportViewer
+      {
+        Name = "reportviewer2010sp1"
+        DependsOn = "[cChocoInstaller]installChoco"
+      }
+   }
+} 
+
+ApplicationInstall
+
