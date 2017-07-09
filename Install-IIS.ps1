@@ -23,7 +23,7 @@ IISConfig -ComputerName "localhost" -OutputPath "C:\build\"
 Configuration ApplicationInstall
 {
    Import-DscResource -Module cChoco  
-   Node "localhost"
+   Node $computerName
    {
       LocalConfigurationManager
       {
