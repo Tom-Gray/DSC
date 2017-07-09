@@ -18,4 +18,3 @@ Configuration IISConfig
 
 IISConfig -ComputerName "localhost" -OutputPath "C:\build\" 
 
-Start-DscConfiguration "C:\build" -wait -Verbose
