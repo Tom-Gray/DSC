@@ -16,7 +16,7 @@ Configuration IISConfig
   }
 }
 
-IISConfig -ComputerName "localhost" -OutputPath "C:\build\" 
+#IISConfig -ComputerName "localhost" -OutputPath "C:\build\" 
 
 
 
@@ -54,5 +54,5 @@ Configuration ApplicationInstall
    }
 } 
 
-ApplicationInstall
+#ApplicationInstall
 
