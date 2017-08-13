@@ -19,17 +19,21 @@ $configData = @{
     Clients  = @{
         WMU  = @{ 
             ClientName      = "WMU";
-            ClientDirectory = "C:\website\dev\service\WMU";
+            ClientDirectory = "C:\websites\dev\service\WMU";
         }
         NSBM = @{ 
             ClientName      = "NSBM"; 
-            ClientDirectory = "C:\website\dev\service\NSBM"; 
+            ClientDirectory = "C:\websites\dev\service\NSBM"; 
         }
     }
 }
 
 configuration PEPiAppServer {
     param(
+        $environment = "dev",
+        $computername,
+        $siteLocation = "C:\websites\"
+
 
     )
 
@@ -37,55 +41,122 @@ configuration PEPiAppServer {
     Import-DscResource -Module cChoco 
     Import-DscResource -module xWebadministration
     
-    node $AllNodes.NodeName {
     
-        LocalConfigurationManager
-            {
-            DebugMode = 'ForceModuleImport'
-            } 
-    }
 
-    node $AllNodes.Where( { $_.Role -eq 'WebServer' }).NodeName {
+    Node  $computerName { #$AllNodes.Where( { $_.Role -eq 'WebServer' }).NodeName {
     
         $ConfigurationData.Clients.GetEnumerator() | ForEach {
         
             $clientDirectory = $_.Value.ClientDirectory
             
             File $clientDirectory.Replace(':\', '_').Replace('\', '_') {
-                DestinationPath = $clientDirectory;
-                Ensure          = 'Present'
+                DestinationPath = "$clientDirectory-$environment";
+                Ensure          = 'Present';
                 Type            = 'Directory';
+                DependsOn       = "[WindowsFeature]Web-Asp-Net45"
             }
         }
 
             
-            WindowsFeature Web-AppInit      { Ensure = 'Present'; Name = 'Web-AppInit' }
-            WindowsFeature Web-Asp-Net45    { Ensure = 'Present'; Name = 'Web-Asp-Net45' }
-            WindowsFeature Web-Http-Tracing { Ensure = 'Present'; Name = 'Web-Http-Tracing' }
-            WindowsFeature Web-Mgmt-Service { Ensure = 'Present'; Name = 'Web-Mgmt-Service' }
-            WindowsFeature Web-Mgmt-console { Ensure = 'Present'; Name = 'Web-Mgmt-Console' }
-            WindowsFeature Web-Net-Ext      { Ensure = 'Present'; Name = 'Web-Net-Ext' }
-            WindowsFeature Web-Server       { Ensure = 'Present'; Name = 'Web-Server' }
-            WindowsFeature Web-WebSockets   { Ensure = 'Present'; Name = 'Web-WebSockets' }
-            WindowsFeature Web-Mgmt-Compat  { Ensure = 'Present'; Name = 'Web-Mgmt-Compat' }
+
+            WindowsFeature Web-Asp-Net45         { Ensure = 'Present'; Name = 'Web-Asp-Net45' }
+            WindowsFeature Web-Mgmt-Service      { Ensure = 'Present'; Name = 'Web-Mgmt-Service' }
+            WindowsFeature Web-Mgmt-console      { Ensure = 'Present'; Name = 'Web-Mgmt-Console' }
+            WindowsFeature Web-Net-Ext           { Ensure = 'Present'; Name = 'Web-Net-Ext' }
+            WindowsFeature Web-Server            { Ensure = 'Present'; Name = 'Web-Server' }
+            WindowsFeature  Web-Dir-Browsing     { Ensure = 'Present'; Name = 'Web-Dir-Browsing' }
+            WindowsFeature Web-Http-Errors       { Ensure = 'Present'; Name = 'Web-Http-Errors' }
+            WindowsFeature Web-Static-Content    { Ensure = 'Present'; Name = 'Web-Static-Content' }
+            WindowsFeature  Web-Http-Redirect    { Ensure = 'Present'; Name = 'Web-Http-Redirect' }
+            
+ 
+
+            
+            xWebsite RemoveDefaultSite
+        {
+            Ensure          = "Present"
+            Name            = "Default Web Site"
+            State           = "Stopped"
+            PhysicalPath    = "C:\inetpub\wwwroot"
+            DependsOn       = "[WindowsFeature]Web-Server"
+        }
+
  
             $ConfigurationData.Clients.GetEnumerator() | ForEach {
         
             $clientName = $_.Value.ClientName
             
-            xWebAppPool $clientName.Replace(':\', '_').Replace('\', '_') {
+            xWebAppPool $clientName {
             
-                Name                           = $clientName
+                Name                           = "$clientName-$environment"
                 Ensure                         = 'Present'
                 State                          = 'Started'
                 autoStart                      = $true
-                enable32BitAppOnWin64          = $false
-                enableConfigurationOverride    = $true
                 managedPipelineMode            = 'Classic' 
                 dependsOn                      = "[WindowsFeature]Web-Asp-Net45"               
-            }
-            }
+            } #xWebAppPool
+
+            xWebAppPool "$clientName-WS" {
             
+                Name                           = "$clientName-$environment-WS"
+                Ensure                         = 'Present'
+                State                          = 'Started'
+                autoStart                      = $true
+                managedPipelineMode            = 'integrated' 
+                dependsOn                      = "[WindowsFeature]Web-Asp-Net45"               
+            } #xWebAppPool-WS
+            } #webappPool Foreach
+
+             xWebsite EnvironmentWebsite
+        {
+            Ensure          = 'Present'
+            Name            = ($environment).toupper()
+            State           = 'Started'
+            PhysicalPath    = "C:\inetpub\wwwroot\"
+            DependsOn       = '[WindowsFeature]Web-Asp-Net45'
+        }
+            
+
+        $ConfigurationData.Clients.GetEnumerator() | ForEach {
+        
+            $clientName = $_.Value.ClientName
+
+            xWebApplication $clientName
+            {
+                Website = $environment
+                Ensure = 'Present'
+                Name = $clientName
+                PhysicalPath = "C:\websites\$environment"
+                WebAppPool = "$clientName-$environment"
+                ApplicationType = 'ApplicationType'
+                AuthenticationInfo = `
+                MSFT_xWebApplicationAuthenticationInformation
+                {
+                    Anonymous = $true
+                    Basic     = $false
+                    Digest    = $false
+                    Windows   = $false
+                }
+                PreloadEnabled = $true
+                ServiceAutoStartEnabled = $true
+                ServiceAutoStartProvider = 'ServiceAutoStartProvider'
+                EnabledProtocols = @('http','net.tcp')
+            }
+        }#WebApp foreeach
+
+
+            File ExampleSiteFile
+            {
+                DestinationPath    = "C:\websites\$environment\servervariables.aspx"
+                Contents = '<%
+                            For Each var as String in Request.ServerVariables
+                            Response.Write(var & " " & Request(var) & "<br>")
+                            Next
+                            %>'
+                Ensure      =   "Present"
+                dependson   =   "[xWebApplication]$clientname"     
+                Force       =      $True                       
+            }
             
             
 
@@ -95,7 +166,7 @@ configuration PEPiAppServer {
                 {
                     InstallDir = "c:\choco"
                 }
-                cChocoPackageInstaller installChrome
+                cChocoPackageInstaller installChrome #this is here as an obvious flag that choco is working.
                 {
                     Name        = "googlechrome"
                     DependsOn   = "[cChocoInstaller]installChoco"
@@ -131,4 +202,4 @@ configuration PEPiAppServer {
 
 } #end configuration
 
-PEPiAppServer -ConfigurationData $configData  
+PEPiAppServer -ConfigurationData $configData  -environment "dev" -computername 'localhost'
