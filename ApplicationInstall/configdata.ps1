@@ -1,29 +1,16 @@
 $configData = @{
     AllNodes = @(
         @{
-            NodeName = 'WEB-PROD';
-            Role     = 'WebServer';
-            siteDirectory = "C:\websites\prod\"
+            NodeName = '*';
         }
-        @{
-            NodeName = 'DB-PROD';
-            Role     = 'DBServer';
-        }
-        @{
-            NodeName = 'DEV';
-            Role     = 'DBServer','WebServer';
-            siteDirectory = "C:\websites\dev\"
-        }
-    )
+   )
 
     Clients  = @{
         WMU  = @{ 
             ClientName      = "WMU";
-            ClientDirectory = "C:\websites\dev\service\WMU";
         }
         NSBM = @{ 
             ClientName      = "NSBM"; 
-            ClientDirectory = "C:\websites\dev\service\NSBM"; 
         }
     }
 }
@@ -40,17 +27,35 @@ configuration PEPiAppServer {
     Import-DscResource -ModuleName PSDesiredStateConfiguration
     Import-DscResource -Module cChoco 
     Import-DscResource -module xWebadministration
+    Import-DscResource -module xSMBShare
     
     
 
     Node  $computerName { #$AllNodes.Where( { $_.Role -eq 'WebServer' }).NodeName {
+        $siteLocation = (Join-Path $siteLocation -ChildPath $environment)
+
+
+        File SiteLocation { # Create the directory that sites will run from
+            DestinationPath  = $siteLocation
+            Ensure          = 'Present'
+            Type            = 'Directory'
+        }
+
+        xSMBShare SharesiteLocation { #share websites directory so T++ can deploy to it
+            Name = 'Websites'
+            path = $siteLocation
+            FullAccess = 'Everyone'
+            Description = 'T++ deploys to this share'
+            DependsOn = "[File]SiteLocation"
+        }
+
     
         $ConfigurationData.Clients.GetEnumerator() | ForEach {
         
-            $clientDirectory = $_.Value.ClientDirectory
+            $clientName = $_.Value.ClientName
             
-            File $clientDirectory.Replace(':\', '_').Replace('\', '_') {
-                DestinationPath = "$clientDirectory-$environment";
+            File $clientName.Replace(':\', '_').Replace('\', '_') {
+                DestinationPath = "$siteLocation\service\$clientName-$environment"
                 Ensure          = 'Present';
                 Type            = 'Directory';
                 DependsOn       = "[WindowsFeature]Web-Asp-Net45"
@@ -58,7 +63,7 @@ configuration PEPiAppServer {
         }
 
             
-
+            #install required IIS Features
             WindowsFeature Web-Asp-Net45         { Ensure = 'Present'; Name = 'Web-Asp-Net45' }
             WindowsFeature Web-Mgmt-Service      { Ensure = 'Present'; Name = 'Web-Mgmt-Service' }
             WindowsFeature Web-Mgmt-console      { Ensure = 'Present'; Name = 'Web-Mgmt-Console' }
@@ -110,7 +115,7 @@ configuration PEPiAppServer {
              xWebsite EnvironmentWebsite
         {
             Ensure          = 'Present'
-            Name            = ($environment).toupper()
+            Name            = $environment.toupper()
             State           = 'Started'
             PhysicalPath    = "C:\inetpub\wwwroot\"
             DependsOn       = '[WindowsFeature]Web-Asp-Net45'
