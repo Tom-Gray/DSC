@@ -8,16 +8,32 @@ $configData = @{
     Clients  = @{
         WMU  = @{ 
             ClientName      = "WMU";
+            Webservice      = $true;
+            StudentPortal   = $false
+            AccomPortal     = $false
+            AgentPortal     = $false
+
         }
         NSBM = @{ 
-            ClientName      = "NSBM"; 
+            ClientName      = "NSBM";
+            Webservice      = $true;
+            StudentPortal   = $false
+            AccomPortal     = $false
+            AgentPortal     = $false 
+        }
+        ATC = @{ 
+            ClientName      = "ATC";
+            Webservice      = $false;
+            StudentPortal   = $true
+            AccomPortal     = $false
+            AgentPortal     = $false 
         }
     }
 }
 
 configuration PEPiAppServer {
     param(
-        $environment = "dev",
+        $environment = "staging",
         $computername,
         $siteLocation = "C:\websites\"
 
@@ -32,7 +48,7 @@ configuration PEPiAppServer {
     
 
     Node  $computerName { #$AllNodes.Where( { $_.Role -eq 'WebServer' }).NodeName {
-        $siteLocation = (Join-Path $siteLocation -ChildPath $environment)
+        
 
 
         File SiteLocation { # Create the directory that sites will run from
@@ -55,7 +71,7 @@ configuration PEPiAppServer {
             $clientName = $_.Value.ClientName
             
             File $clientName.Replace(':\', '_').Replace('\', '_') {
-                DestinationPath = "$siteLocation\service\$clientName-$environment"
+                DestinationPath = "$siteLocation\$clientName-$environment"
                 Ensure          = 'Present';
                 Type            = 'Directory';
                 DependsOn       = "[WindowsFeature]Web-Asp-Net45"
